@@ -393,7 +393,7 @@
 
             <!-- Form Geri Bildirim Mesajı & Instagram Hızlı Bağlantısı -->
             <div class="mt-3.5 flex flex-col sm:flex-row items-center justify-between gap-2 px-2 text-xs">
-                <p id="notifyFeedback" class="text-stone/85 font-light">
+                <p id="notifyFeedback" role="status" aria-live="polite" class="text-stone/85 font-light">
                     İlk haberler, YouTube programları ve röportajlar yayına girdiğinde bildirim alın.
                 </p>
                 <a href="https://instagram.com/kadrafotograf" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-amber-gold hover:text-amber-light font-medium transition-colors">
@@ -787,233 +787,240 @@
 
     <!-- Etkileşimli JavaScript Kodları -->
     <script>
-        // Harici logo dosyası yüklenemediğinde sırasıyla logo.svg, logo.webp, logo.jpg dener;
-        // hiçbiri bulunamazsa zarif tipografik 'KADRA' rozetini gösterir.
-        function handleLogoFallback(imgElement) {
-            const fallbackExtensions = ['logo.svg', 'logo.webp', 'logo.jpg'];
-            const currentAttempt = Number(imgElement.dataset.fallbackIndex || 0);
+        document.addEventListener('DOMContentLoaded', () => {
+            // Genel bildirim (Toast) sistemi
+            const toastBanner = document.getElementById('toastBanner');
+            const toastMessage = document.getElementById('toastMessage');
+            let toastTimeout;
 
-            // 3. Lansman Davetiyesi Formu (kadragrup@gmail.com Adresine Doğrudan Bildirim)
+            function showToast(message) {
+                if (!toastBanner || !toastMessage) return;
+                toastMessage.textContent = message;
+                window.clearTimeout(toastTimeout);
+                toastBanner.classList.remove('opacity-0', 'translate-y-3');
+                toastBanner.classList.add('opacity-100', 'translate-y-0');
+                toastTimeout = window.setTimeout(() => {
+                    toastBanner.classList.remove('opacity-100', 'translate-y-0');
+                    toastBanner.classList.add('opacity-0', 'translate-y-3');
+                }, 3200);
+            }
+
+            // Logo bulunamazsa alternatif dosyaları dener; ardından yazı logosunu gösterir.
+            window.handleLogoFallback = function (imgElement) {
+                if (!imgElement) return;
+                const alternatives = ['logo.svg', 'logo.webp', 'logo.jpg'];
+                const current = Number(imgElement.dataset.fallbackIndex || 0);
+                if (current < alternatives.length) {
+                    imgElement.dataset.fallbackIndex = String(current + 1);
+                    imgElement.src = alternatives[current];
+                    return;
+                }
+                imgElement.classList.add('hidden');
+                const fallback = imgElement.nextElementSibling;
+                if (fallback && fallback.classList.contains('logo-fallback')) {
+                    fallback.classList.remove('hidden');
+                    fallback.classList.add('inline-flex');
+                }
+            };
+
+            // Deklanşör flaşı
+            function triggerShutterEffect() {
+                const flash = document.getElementById('shutterFlashOverlay');
+                if (!flash) return;
+                flash.classList.remove('shutter-flash-active');
+                void flash.offsetWidth;
+                flash.classList.add('shutter-flash-active');
+            }
+
+            // Fareyle takip eden ışık ve vizör koordinatları
+            const spotlight = document.getElementById('spotlight');
+            const viewfinderCoords = document.getElementById('viewfinderCoords');
+            window.addEventListener('mousemove', (event) => {
+                window.requestAnimationFrame(() => {
+                    if (spotlight) {
+                        spotlight.style.left = `${event.clientX}px`;
+                        spotlight.style.top = `${event.clientY}px`;
+                    }
+                    if (viewfinderCoords) {
+                        const x = String(Math.round(event.clientX)).padStart(3, '0');
+                        const y = String(Math.round(event.clientY)).padStart(3, '0');
+                        viewfinderCoords.textContent = `X:${x} Y:${y}`;
+                    }
+                });
+            });
+
+            // Canlı geri sayım
+            const daysEl = document.getElementById('days');
+            const hoursEl = document.getElementById('hours');
+            const minutesEl = document.getElementById('minutes');
+            const secondsEl = document.getElementById('seconds');
+            const publishDate = new Date('2027-02-02T00:00:00+03:00').getTime();
+            const padZero = (value) => String(value).padStart(2, '0');
+
+            function updateCountdown() {
+                const remaining = Math.max(0, publishDate - Date.now());
+                const days = Math.floor(remaining / 86400000);
+                const hours = Math.floor((remaining % 86400000) / 3600000);
+                const minutes = Math.floor((remaining % 3600000) / 60000);
+                const seconds = Math.floor((remaining % 60000) / 1000);
+                if (daysEl) daysEl.textContent = padZero(days);
+                if (hoursEl) hoursEl.textContent = padZero(hours);
+                if (minutesEl) minutesEl.textContent = padZero(minutes);
+                if (secondsEl) secondsEl.textContent = padZero(seconds);
+            }
+            updateCountdown();
+            window.setInterval(updateCountdown, 1000);
+
+            // Yayın bildirimi: FormSubmit AJAX ile gönderilir; sayfa yönlendirilmez.
             const notifyForm = document.getElementById('notifyForm');
             const notifyEmailInput = document.getElementById('notifyEmailInput');
             const notifyFeedback = document.getElementById('notifyFeedback');
             const notifySubmitBtn = document.getElementById('notifySubmitBtn');
             const notifyBtnText = document.getElementById('notifyBtnText');
+            const notifyBtnIcon = document.getElementById('notifyBtnIcon');
+
+            function setFormFeedback(type, message, detail = '') {
+                if (!notifyFeedback) return;
+                const colorClass = type === 'success' ? 'text-amber-gold' : 'text-red-400';
+                notifyFeedback.replaceChildren();
+                const heading = document.createElement('span');
+                heading.className = `${colorClass} font-medium`;
+                heading.textContent = message;
+                notifyFeedback.appendChild(heading);
+                if (detail) {
+                    const description = document.createElement('span');
+                    description.className = 'text-stone';
+                    description.textContent = ` ${detail}`;
+                    notifyFeedback.appendChild(description);
+                }
+            }
 
             if (notifyForm && notifyEmailInput) {
-                notifyForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const emailVal = notifyEmailInput.value.trim();
-                    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal);
-
-                    if (!isValidEmail) {
-                        notifyEmailInput.focus();
-                        showToast('Lütfen geçerli bir e-posta adresi girin.');
+                notifyForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    if (!notifyEmailInput.checkValidity()) {
+                        notifyEmailInput.reportValidity();
                         return;
                     }
 
-                    // Gönderim durumu (Loading)
+                    const email = notifyEmailInput.value.trim();
+                    if (!email) {
+                        notifyEmailInput.focus();
+                        showToast('Lütfen e-posta adresinizi girin.');
+                        return;
+                    }
+
+                    const honeypot = notifyForm.querySelector('input[name="_honey"]');
+                    if (honeypot && honeypot.value) return;
+
                     if (notifySubmitBtn) notifySubmitBtn.disabled = true;
                     if (notifyBtnText) notifyBtnText.textContent = 'Gönderiliyor...';
+                    if (notifyBtnIcon) notifyBtnIcon.classList.add('hidden');
+                    if (notifyFeedback) {
+                        notifyFeedback.textContent = 'E-posta adresiniz güvenli şekilde gönderiliyor...';
+                    }
 
                     try {
+                        const payload = {
+                            email,
+                            _subject: 'Kadra — Yeni Yayın Bildirimi Abonesi',
+                            _template: 'table',
+                            _captcha: 'false',
+                            Kayit_Tarihi: new Date().toLocaleString('tr-TR'),
+                            Sayfa_Kaynak: window.location.href
+                        };
+
                         const response = await fetch('https://formsubmit.co/ajax/kadragrup@gmail.com', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Accept': 'application/json'
                             },
-                            body: JSON.stringify({
-                                _subject: 'Kadra — Yeni Yayın Bildirimi Abonesi',
-                                _template: 'table',
-                                _captcha: 'false',
-                                Abone_Eposta: emailVal,
-                                Kayit_Tarihi: new Date().toLocaleString('tr-TR'),
-                                Sayfa_Kaynak: window.location.href
-                            })
+                            body: JSON.stringify(payload)
                         });
 
-                        const result = await response.json();
-
-                        if (response.ok && (result.success === 'true' || result.success === true)) {
-                            triggerShutterEffect();
-                            notifyEmailInput.value = '';
-                            if (notifyFeedback) {
-                                notifyFeedback.innerHTML = `<span class="text-amber-gold font-medium">Kaydınız iletildi:</span> ${emailVal} adresiniz yayın bildirim listemize eklendi.`;
-                            }
-                            showToast('Talebiniz kadragrup@gmail.com adresine iletildi.');
-                        } else {
-                            throw new Error('Gönderim yanıtı başarısız');
+                        const responseText = await response.text();
+                        let result = {};
+                        try {
+                            result = responseText ? JSON.parse(responseText) : {};
+                        } catch (_) {
+                            throw new Error('E-posta hizmetinden geçerli bir yanıt alınamadı.');
                         }
+
+                        const successValue = String(result.success ?? '').toLowerCase();
+                        if (!response.ok || successValue !== 'true') {
+                            throw new Error(result.message || 'Kayıt işlemi tamamlanamadı.');
+                        }
+
+                        triggerShutterEffect();
+                        notifyForm.reset();
+                        setFormFeedback(
+                            'success',
+                            '✓ Başarıyla eklendi!',
+                            'Yayın başladığında e-posta adresinize bilgilendirme gönderilecektir.'
+                        );
+                        if (notifyBtnText) notifyBtnText.textContent = 'Başarıyla Eklendi';
+                        showToast('Yayın bildirim listenize başarıyla eklendiniz.');
                     } catch (error) {
-                        // Ağ veya servis engeli durumunda güvenli mailto yedek mekanizması
-                        const mailSubject = encodeURIComponent('Kadra Yayın Bildirimi Kaydı');
-                        const mailBody = encodeURIComponent(`Merhaba Kadra Ekibi,\n\nYayın başladığında haberdar olmak istiyorum.\nE-posta adresim: ${emailVal}`);
-                        window.location.href = `mailto:kadragrup@gmail.com?subject=${mailSubject}&body=${mailBody}`;
-
-                        if (notifyFeedback) {
-                            notifyFeedback.innerHTML = `<span class="text-amber-gold font-medium">E-posta istemcisi yönlendirildi:</span> Kaydınızı tamamlamak için gönder butonuna basın.`;
-                        }
-                        showToast('E-posta uygulamanız üzerinden gönderim başlatıldı.');
+                        console.error('Kadra bildirim formu gönderim hatası:', error);
+                        setFormFeedback(
+                            'error',
+                            'Kayıt sırasında bir sorun oluştu.',
+                            'Lütfen internet bağlantınızı kontrol edip yeniden deneyin.'
+                        );
+                        if (notifyBtnText) notifyBtnText.textContent = 'Tekrar Dene';
+                        showToast('Gönderim başarısız. Lütfen tekrar deneyin.');
                     } finally {
                         if (notifySubmitBtn) notifySubmitBtn.disabled = false;
-                        if (notifyBtnText) notifyBtnText.textContent = 'Haber Ver';
+                        if (notifyBtnIcon) notifyBtnIcon.classList.remove('hidden');
                     }
                 });
             }
 
-            // Genel Toast Bildirim Yardımcısı
-            const toastBanner = document.getElementById('toastBanner');
-            const toastMessage = document.getElementById('toastMessage');
-            let toastTimeout;
-
-            function showToast(msg) {
-                if (!toastBanner || !toastMessage) return;
-                toastMessage.textContent = msg;
-                clearTimeout(toastTimeout);
-                toastBanner.classList.remove('opacity-0', 'translate-y-3');
-                toastBanner.classList.add('opacity-100', 'translate-y-0');
-
-                toastTimeout = setTimeout(() => {
-                    toastBanner.classList.remove('opacity-100', 'translate-y-0');
-                    toastBanner.classList.add('opacity-0', 'translate-y-3');
-                }, 3000);
+            // E-posta adresini panoya kopyalama
+            async function copyOfficialEmail() {
+                const email = 'kadragrup@gmail.com';
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(email);
+                    } else {
+                        const temp = document.createElement('textarea');
+                        temp.value = email;
+                        temp.setAttribute('readonly', '');
+                        temp.style.position = 'fixed';
+                        temp.style.opacity = '0';
+                        document.body.appendChild(temp);
+                        temp.select();
+                        const copied = document.execCommand('copy');
+                        temp.remove();
+                        if (!copied) throw new Error('Kopyalama başarısız');
+                    }
+                    triggerShutterEffect();
+                    showToast(`${email} panoya kopyalandı.`);
+                } catch (error) {
+                    showToast('E-posta adresi kopyalanamadı.');
+                }
             }
 
-            // 1. İnteraktif Altın Saat Spotlight & Vizör Koordinat Güncellemesi
-            const spotlight = document.getElementById('spotlight');
-            const viewfinderCoords = document.getElementById('viewfinderCoords');
-
-            window.addEventListener('mousemove', (e) => {
-                requestAnimationFrame(() => {
-                    if (spotlight) {
-                        spotlight.style.left = `${e.clientX}px`;
-                        spotlight.style.top = `${e.clientY}px`;
-                    }
-                    if (viewfinderCoords) {
-                        const x = String(Math.round(e.clientX)).padStart(3, '0');
-                        const y = String(Math.round(e.clientY)).padStart(3, '0');
-                        viewfinderCoords.textContent = `X:${x} Y:${y}`;
-                    }
-                });
+            ['copyEmailBtn', 'ctaCopyEmailBtn', 'modalCopyEmailBtn'].forEach((id) => {
+                const button = document.getElementById(id);
+                if (button) button.addEventListener('click', copyOfficialEmail);
             });
 
-            // 2. Canlı Geri Sayım Sayacı
-            const daysEl = document.getElementById('days');
-            const hoursEl = document.getElementById('hours');
-            const minutesEl = document.getElementById('minutes');
-            const secondsEl = document.getElementById('seconds');
-
-            const STORAGE_KEY = 'kadra_launch_target_2027';
-            const PUBLISH_DATE_STR = '2027-02-02T00:00:00';
-            const targetPublishDeadline = new Date(PUBLISH_DATE_STR).getTime();
-
-            let targetTimestamp = localStorage.getItem(STORAGE_KEY);
-            if (!targetTimestamp || Number(targetTimestamp) !== targetPublishDeadline) {
-                targetTimestamp = targetPublishDeadline;
-                try {
-                    localStorage.setItem(STORAGE_KEY, String(targetTimestamp));
-                } catch (e) {}
-            } else {
-                targetTimestamp = Number(targetTimestamp);
-            }
-
-            function padZero(num) {
-                return String(num).padStart(2, '0');
-            }
-
-            function updateCountdown() {
-                const now = Date.now();
-                const diff = Math.max(0, targetTimestamp - now);
-
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-                const minutes = Math.floor((diff / 1000 / 60) % 60);
-                const seconds = Math.floor((diff / 1000) % 60);
-
-                if (daysEl) daysEl.textContent = padZero(days);
-                if (hoursEl) hoursEl.textContent = padZero(hours);
-                if (minutesEl) minutesEl.textContent = padZero(minutes);
-                if (secondsEl) secondsEl.textContent = padZero(seconds);
-            }
-
-            updateCountdown();
-            setInterval(updateCountdown, 1000);
-
-            // 3. Lansman Davetiyesi Formu
-            const notifyForm = document.getElementById('notifyForm');
-            const notifyEmailInput = document.getElementById('notifyEmailInput');
-            const notifyFeedback = document.getElementById('notifyFeedback');
-
-            if (notifyForm && notifyEmailInput) {
-                notifyForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const emailVal = notifyEmailInput.value.trim();
-                    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal);
-
-                    if (!isValidEmail) {
-                        notifyEmailInput.focus();
-                        showToast('Lütfen geçerli bir e-posta adresi girin.');
-                        return;
-                    }
-
-                    triggerShutterEffect();
-                    try {
-                        localStorage.setItem('kadra_subscriber_email', emailVal);
-                    } catch (err) {}
-
-                    notifyEmailInput.value = '';
-                    if (notifyFeedback) {
-                        notifyFeedback.innerHTML = `<span class="text-amber-gold font-medium">Kaydınız alındı:</span> ${emailVal} adresine lansman davetiyesi gönderilecek.`;
-                    }
-                    showToast('Yayın bildirim listesine kaydınız alındı.');
-                });
-            }
-
-            // 4. E-posta Adresi Kopyalama İşlevleri
-            function copyOfficialEmail() {
-                const emailToCopy = 'kadragrup@gmail.com';
-                const tempInput = document.createElement('textarea');
-                tempInput.value = emailToCopy;
-                tempInput.setAttribute('readonly', '');
-                tempInput.style.position = 'absolute';
-                tempInput.style.left = '-9999px';
-                document.body.appendChild(tempInput);
-                tempInput.select();
-
-                try {
-                    document.execCommand('copy');
-                } catch (err) {}
-                document.body.removeChild(tempInput);
-
-                triggerShutterEffect();
-                showToast('kadragrup@gmail.com panoya kopyalandı.');
-            }
-
-            const copyEmailBtn = document.getElementById('copyEmailBtn');
-            const ctaCopyEmailBtn = document.getElementById('ctaCopyEmailBtn');
-            const modalCopyEmailBtn = document.getElementById('modalCopyEmailBtn');
-
-            if (copyEmailBtn) copyEmailBtn.addEventListener('click', copyOfficialEmail);
-            if (ctaCopyEmailBtn) ctaCopyEmailBtn.addEventListener('click', copyOfficialEmail);
-            if (modalCopyEmailBtn) modalCopyEmailBtn.addEventListener('click', copyOfficialEmail);
-
-            // 5. Faaliyet Kartları İmleç Işık Efekti & Yayın Dosyası Detay Modalı
+            // Kartların imleç ışık efekti
             const pillarCards = document.querySelectorAll('.pillar-card');
             pillarCards.forEach((card) => {
-                card.addEventListener('mousemove', (e) => {
+                card.addEventListener('mousemove', (event) => {
                     const rect = card.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    card.style.setProperty('--mouse-x', `${x}px`);
-                    card.style.setProperty('--mouse-y', `${y}px`);
+                    card.style.setProperty('--mouse-x', `${event.clientX - rect.left}px`);
+                    card.style.setProperty('--mouse-y', `${event.clientY - rect.top}px`);
                 });
             });
 
+            // Yayın dosyası modal içerikleri
             const pillarData = {
                 news: {
-                    index: '01 /',
-                    tag: 'GÜNCEL AKIŞ & HABER DOSYASI',
+                    index: '01 /', tag: 'GÜNCEL AKIŞ & HABER DOSYASI',
                     title: 'Fotoğraf Sanatı Haberleri',
                     summary: 'Türkiye ve dünya fotoğraf sahnesindeki güncel gelişmeleri, nitelikli sergi duyurularını, uluslararası festivalleri ve fotoğrafçılar için açık çağrıları düzenli editoryal bültenlerle aktarıyoruz.',
                     deliverables: [
@@ -1024,8 +1031,7 @@
                     participation: 'Sergi duyurularınızı, basın bültenlerinizi veya açık çağrı metinlerinizi yayın kurulumuza iletmek için kadragrup@gmail.com adresine e-posta gönderebilirsiniz.'
                 },
                 youtube: {
-                    index: '02 /',
-                    tag: 'VİDEO & YAYIN DOSYASI',
+                    index: '02 /', tag: 'VİDEO & YAYIN DOSYASI',
                     title: 'YouTube Programları',
                     summary: 'Fotoğraf sanatını hem kuramsal derinliği hem de pratik sahadaki karşılığıyla ele alan düzenli YouTube programları hazırlıyor; izleyiciyi karelerin arkasındaki düşünce süreciyle buluşturuyoruz.',
                     deliverables: [
@@ -1036,8 +1042,7 @@
                     participation: 'Yeni bölüm fragmanları, yayın takvimi ve YouTube kanal duyurularını @kadrafotograf Instagram hesabımız üzerinden takip edebilirsiniz.'
                 },
                 interviews: {
-                    index: '03 /',
-                    tag: 'ÖZEL SÖYLEŞİ DOSYASI',
+                    index: '03 /', tag: 'ÖZEL SÖYLEŞİ DOSYASI',
                     title: 'Özel Röportajlar',
                     summary: 'Usta fotoğrafçılar, genç üreticiler, küratörler ve yayıncılarla gerçekleştirdiğimiz derinlemesine röportajları hem video hem de editoryal yazılı formatta okur ve izleyicilerimizle buluşturuyoruz.',
                     deliverables: [
@@ -1063,29 +1068,26 @@
             function openPillarModal(key) {
                 const data = pillarData[key];
                 if (!data || !pillarModal) return;
-
                 triggerShutterEffect();
-
                 modalIndex.textContent = data.index;
                 modalTag.textContent = data.tag;
                 modalTitle.textContent = data.title;
                 modalSummary.textContent = data.summary;
                 modalParticipation.textContent = data.participation;
-
-                modalDeliverables.innerHTML = data.deliverables
-                    .map(
-                        (item) => `
-                        <li class="flex items-start gap-2.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-gold mt-2 shrink-0"></span>
-                            <span>${item}</span>
-                        </li>`
-                    )
-                    .join('');
-
+                modalDeliverables.replaceChildren();
+                data.deliverables.forEach((item) => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-start gap-2.5';
+                    const dot = document.createElement('span');
+                    dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-gold mt-2 shrink-0';
+                    const label = document.createElement('span');
+                    label.textContent = item;
+                    li.append(dot, label);
+                    modalDeliverables.appendChild(li);
+                });
                 pillarModal.classList.remove('hidden');
                 pillarModal.classList.add('flex');
                 document.body.style.overflow = 'hidden';
-
                 requestAnimationFrame(() => {
                     modalBackdrop.classList.remove('opacity-0');
                     modalBackdrop.classList.add('opacity-100');
@@ -1096,39 +1098,56 @@
 
             function closePillarModal() {
                 if (!pillarModal || pillarModal.classList.contains('hidden')) return;
-
                 modalBackdrop.classList.remove('opacity-100');
                 modalBackdrop.classList.add('opacity-0');
                 modalCard.classList.remove('opacity-100', 'scale-100');
                 modalCard.classList.add('opacity-0', 'scale-95');
-
-                setTimeout(() => {
+                window.setTimeout(() => {
                     pillarModal.classList.add('hidden');
                     pillarModal.classList.remove('flex');
                     document.body.style.overflow = '';
-                }, 260);
+                }, 300);
             }
 
             pillarCards.forEach((card) => {
-                card.addEventListener('click', () => {
-                    openPillarModal(card.dataset.pillar);
-                });
-                card.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
+                card.addEventListener('click', () => openPillarModal(card.dataset.pillar));
+                card.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
                         openPillarModal(card.dataset.pillar);
                     }
                 });
             });
-
             if (closeModalBtn) closeModalBtn.addEventListener('click', closePillarModal);
             if (modalBackdrop) modalBackdrop.addEventListener('click', closePillarModal);
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    closePillarModal();
-                }
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') closePillarModal();
             });
+
+            // Deklanşör sesi aç/kapat
+            const soundToggleBtn = document.getElementById('soundToggleBtn');
+            const soundIconOff = document.getElementById('soundIconOff');
+            const soundIconOn = document.getElementById('soundIconOn');
+            const soundLabel = document.getElementById('soundLabel');
+            let soundEnabled = false;
+            if (soundToggleBtn) {
+                soundToggleBtn.addEventListener('click', async () => {
+                    soundEnabled = !soundEnabled;
+                    soundToggleBtn.setAttribute('aria-pressed', String(soundEnabled));
+                    if (soundIconOff) soundIconOff.classList.toggle('hidden', soundEnabled);
+                    if (soundIconOn) soundIconOn.classList.toggle('hidden', !soundEnabled);
+                    if (soundLabel) soundLabel.textContent = soundEnabled ? 'SES: AÇIK' : 'SES: KAPALI';
+                    showToast(soundEnabled ? 'Deklanşör sesi açıldı.' : 'Deklanşör sesi kapatıldı.');
+                    if (soundEnabled && window.Tone) {
+                        try {
+                            await Tone.start();
+                            const synth = new Tone.MembraneSynth().toDestination();
+                            synth.triggerAttackRelease('C2', '16n');
+                            window.setTimeout(() => synth.dispose(), 500);
+                        } catch (_) {}
+                    }
+                });
+            }
         });
     </script>
 </body>
